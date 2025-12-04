@@ -1,24 +1,40 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/joho/godotenv"
 
 	"inventory-api/internal/database"
 	"inventory-api/internal/handlers"
 )
 
 func main() {
-	connString := "postgres://postgres:testing@localhost:5433/postgres?sslmode=disable"
+	// 1. Setup Structured Logger (JSON)
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
+	if err := godotenv.Load(); err != nil {
+		slog.Warn("File .env Not Found, Use Environment System")
+	}
+
+	connString := os.Getenv("DATABASE_URL")
+	port := os.Getenv("PORT")
+
+	if connString == "" || port == "" {
+		slog.Error("Config Environment Incomplete")
+		os.Exit(1)
+	}
 
 	dbPool, err := database.InitDB(connString)
 	if err != nil {
-		log.Fatalf("Could not initialize database: %v", err)
+		slog.Error("Could not initialize database: %v", err)
+		os.Exit(1)
 	}
-
 	defer dbPool.Close()
 
 	productHandler := &handlers.ProductHandler{
@@ -28,7 +44,7 @@ func main() {
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
-	// r.Use(middleware.Recoverer)
+	r.Use(middleware.Recoverer)
 
 	r.Route("/products", func(r chi.Router) {
 		// r.Post("/", handlers.CreateProduct)
@@ -55,10 +71,11 @@ func main() {
 		w.Write([]byte("Welcome to the Inventory API"))
 	})
 
-	log.Println("Starting server on :8081")
+	slog.Info("Starting starting...", "port", port)
 
-	err = http.ListenAndServe(":8081", r)
+	err = http.ListenAndServe(":"+port, r)
 	if err != nil {
-		log.Fatalf("Server failed to start: %v", err)
+		slog.Error("Server failed to start: %v", err)
+		os.Exit(1)
 	}
 }

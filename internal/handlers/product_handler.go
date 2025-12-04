@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/validator/v10"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -15,9 +16,9 @@ type ProductHandler struct {
 
 type Product struct {
 	ID       string `json:"id"`
-	Name     string `json:"name"`
-	SKU      string `json:"sku"`
-	Quantity int    `json:"quantity"`
+	Name     string `json:"name" validate:"required"`
+	SKU      string `json:"sku" validate:"required"`
+	Quantity int    `json:"quantity" validate:"gte=0"`
 }
 
 func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
@@ -26,8 +27,18 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 
 	var product Product
 
+	// 1. Decode JSON
 	if err := json.NewDecoder(r.Body).Decode(&product); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
+
+	// 2. Start Validasi
+	validate := validator.New()
+
+	err := validate.Struct(product)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Validation failed: %s", err.Error()), http.StatusBadRequest)
 		return
 	}
 
@@ -38,7 +49,7 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	`
 
 	var newID string
-	err := h.DB.QueryRow(r.Context(), query, product.Name, product.SKU, product.Quantity).Scan(&newID)
+	err = h.DB.QueryRow(r.Context(), query, product.Name, product.SKU, product.Quantity).Scan(&newID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed store to DB: %v", err), http.StatusInternalServerError)
