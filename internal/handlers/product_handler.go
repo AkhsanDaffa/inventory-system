@@ -7,25 +7,19 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	"github.com/jackc/pgx/v5/pgxpool"
+
+	"inventory-api/internal/repository"
 )
 
 type ProductHandler struct {
-	DB *pgxpool.Pool
-}
-
-type Product struct {
-	ID       string `json:"id"`
-	Name     string `json:"name" validate:"required"`
-	SKU      string `json:"sku" validate:"required"`
-	Quantity int    `json:"quantity" validate:"gte=0"`
+	Repo *repository.ProductRepository
 }
 
 func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 	// w.WriteHeader(http.StatusCreated)
 	// w.Write([]byte(`{"message": "product created successfully"}`))
 
-	var product Product
+	var product repository.Product
 
 	// 1. Decode JSON
 	if err := json.NewDecoder(r.Body).Decode(&product); err != nil {
@@ -35,30 +29,17 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Start Validasi
 	validate := validator.New()
-
-	err := validate.Struct(product)
-	if err != nil {
+	if err := validate.Struct(product); err != nil {
 		http.Error(w, fmt.Sprintf("Validation failed: %s", err.Error()), http.StatusBadRequest)
 		return
 	}
 
-	query := `
-		INSERT INTO products (name, sku, quantity)
-		VALUES ($1, $2, $3)
-		RETURNING id
-	`
-
-	var newID string
-	err = h.DB.QueryRow(r.Context(), query, product.Name, product.SKU, product.Quantity).Scan(&newID)
+	err := h.Repo.CreateProduct(r.Context(), &product)
 
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed store to DB: %v", err), http.StatusInternalServerError)
+		http.Error(w, "Failed store data", http.StatusInternalServerError)
 		return
 	}
-
-	product.ID = newID
-
-	// fmt.Printf("Received product: %+v\n", product)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -70,24 +51,10 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) GetAllProducts(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.DB.Query(r.Context(), "SELECT id, name, sku, quantity FROM products")
+	products, err := h.Repo.GetAllProducts(r.Context())
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to fetch products: %v", err), http.StatusInternalServerError)
+		http.Error(w, "Failed to fetch products: %v", http.StatusInternalServerError)
 		return
-	}
-
-	defer rows.Close()
-
-	products := []Product{}
-
-	for rows.Next() {
-		var p Product
-
-		if err := rows.Scan(&p.ID, &p.Name, &p.SKU, &p.Quantity); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to scan product: %v", err), http.StatusInternalServerError)
-			return
-		}
-		products = append(products, p)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -99,82 +66,60 @@ func (h *ProductHandler) GetAllProducts(w http.ResponseWriter, r *http.Request) 
 func (h *ProductHandler) GetProductByID(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	// response := fmt.Sprintf(`{"id": "%s", "name": "dummy product %s", "quantity": 10}`, id, id)
-	// w.WriteHeader(http.StatusOK)
-	// w.Write([]byte(response))
-
-	var p Product
-
-	query := "SELECT id, name, sku, quantity FROM products WHERE id=$1"
-
-	err := h.DB.QueryRow(r.Context(), query, id).Scan(&p.ID, &p.Name, &p.SKU, &p.Quantity)
-
+	product, err := h.Repo.GetProductByID(r.Context(), id)
 	if err != nil {
-		http.Error(w, "Product not found or invalid ID", http.StatusNotFound)
+		http.Error(w, "Product not found", http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"data": p,
+		"data": product,
 	})
 }
 
 func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	// response := fmt.Sprintf(`{"message": "product %s updated successfully"}`, id)
-	// w.WriteHeader(http.StatusOK)
-	// w.Write([]byte(response))
+	var product repository.Product
 
-	var p Product
-
-	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&product); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	if p.Name == "" || p.SKU == "" {
-		http.Error(w, "Name and SKU are required fields", http.StatusBadRequest)
+	validate := validator.New()
+	if err := validate.Struct(product); err != nil {
+		http.Error(w, fmt.Sprintf("Validation failed: %s", err.Error()), http.StatusBadRequest)
 		return
 	}
 
-	query := "UPDATE products SET name=$1, sku=$2, quantity=$3 WHERE id=$4"
-
-	commandTag, err := h.DB.Exec(r.Context(), query, p.Name, p.SKU, p.Quantity, id)
+	err := h.Repo.UpdateProduct(r.Context(), id, &product)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to update product: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	if commandTag.RowsAffected() == 0 {
-		http.Error(w, "Product not found", http.StatusNotFound)
+		if err.Error() == "product not found" {
+			http.Error(w, "Product not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Gagal update", http.StatusInternalServerError)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message": "product updated successfully",
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Product updated successfully",
 	})
 }
 
 func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	// response := fmt.Sprintf(`{"message": "product %s deleted successfully"}`, id)
-	// w.WriteHeader(http.StatusOK)
-	// w.Write([]byte(response))
-
-	query := "DELETE FROM products WHERE id=$1"
-
-	commandTag, err := h.DB.Exec(r.Context(), query, id)
+	err := h.Repo.DeleteProduct(r.Context(), id)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to delete product: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	if commandTag.RowsAffected() == 0 {
-		http.Error(w, "Product not found", http.StatusNotFound)
+		if err.Error() == "product not found" {
+			http.Error(w, "Product not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed Delete", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -183,11 +128,3 @@ func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 		"message": "product deleted successfully",
 	})
 }
-
-// func IncrementProductStock(w http.ResponseWriter, r *http.Request) {
-// 	id := chi.URLParam(r, "id")
-
-// 	response := fmt.Sprintf(`{"message": "stock for product %s incremented"}`, id)
-// 	w.WriteHeader(http.StatusOK)
-// 	w.Write([]byte(response))
-// }

@@ -11,6 +11,7 @@ import (
 
 	"inventory-api/internal/database"
 	"inventory-api/internal/handlers"
+	"inventory-api/internal/repository"
 )
 
 func main() {
@@ -37,8 +38,12 @@ func main() {
 	}
 	defer dbPool.Close()
 
-	productHandler := &handlers.ProductHandler{
+	productRepo := &repository.ProductRepository{
 		DB: dbPool,
+	}
+
+	productHandler := &handlers.ProductHandler{
+		Repo: productRepo,
 	}
 
 	r := chi.NewRouter()
@@ -47,18 +52,8 @@ func main() {
 	r.Use(middleware.Recoverer)
 
 	r.Route("/products", func(r chi.Router) {
-		// r.Post("/", handlers.CreateProduct)
-		// r.Get("/", handlers.GetAllProducts)
-
 		r.Post("/", productHandler.CreateProduct)
 		r.Get("/", productHandler.GetAllProducts)
-
-		// r.Route("/{id}", func(r chi.Router) {
-		// 	r.Get("/", handlers.GetProductByID)
-		// 	r.Put("/", handlers.UpdateProduct)
-		// 	r.Delete("/", handlers.DeleteProduct)
-		// 	r.Post("/increment-stock", handlers.IncrementProductStock)
-		// })
 
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", productHandler.GetProductByID)
@@ -73,9 +68,7 @@ func main() {
 
 	slog.Info("Starting starting...", "port", port)
 
-	err = http.ListenAndServe(":"+port, r)
-	if err != nil {
-		slog.Error("Server failed to start: %v", err)
-		os.Exit(1)
+	if err := http.ListenAndServe(":"+port, r); err != nil {
+		slog.Error("Server failed to start", "error", err)
 	}
 }
