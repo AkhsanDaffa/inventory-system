@@ -54,6 +54,14 @@ func main() {
 		Repo: categoryRepo,
 	}
 
+	customerRepo := &repository.CustomerRepository{
+		DB: dbPool,
+	}
+
+	customerHandler := &handlers.CustomerHandler{
+		Repo: customerRepo,
+	}
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -73,6 +81,11 @@ func main() {
 	r.Route("/categories", func(r chi.Router) {
 		r.Post("/", categoryHandler.CreateCategory)
 		r.Get("/", categoryHandler.GetAllCategories)
+	})
+
+	r.Route("/customers", func(r chi.Router) {
+		r.Post("/", customerHandler.CreateCustomer)
+		r.Get("/", customerHandler.GetAllCustomers)
 	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
