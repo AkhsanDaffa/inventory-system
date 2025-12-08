@@ -46,6 +46,14 @@ func main() {
 		Repo: productRepo,
 	}
 
+	categoryRepo := &repository.CategoryRepository{
+		DB: dbPool,
+	}
+
+	categoryHandler := &handlers.CategoryHandler{
+		Repo: categoryRepo,
+	}
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -60,6 +68,11 @@ func main() {
 			r.Put("/", productHandler.UpdateProduct)
 			r.Delete("/", productHandler.DeleteProduct)
 		})
+	})
+
+	r.Route("/categories", func(r chi.Router) {
+		r.Post("/", categoryHandler.CreateCategory)
+		r.Get("/", categoryHandler.GetAllCategories)
 	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
