@@ -101,6 +101,7 @@ func main() {
 	})
 
 	r.Post("/register", userHandler.RegisterUser)
+	r.Post("/login", userHandler.LoginUser)
 
 	slog.Info("Starting starting...", "port", port)
 
