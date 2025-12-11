@@ -62,6 +62,14 @@ func main() {
 		Repo: customerRepo,
 	}
 
+	userRepo := &repository.UserRepository{
+		DB: dbPool,
+	}
+
+	userHandler := &handlers.UserHandler{
+		Repo: userRepo,
+	}
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.Logger)
@@ -91,6 +99,8 @@ func main() {
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Welcome to the Inventory API"))
 	})
+
+	r.Post("/register", userHandler.RegisterUser)
 
 	slog.Info("Starting starting...", "port", port)
 
