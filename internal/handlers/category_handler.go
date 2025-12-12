@@ -7,6 +7,7 @@ import (
 
 	"inventory-api/internal/repository"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -49,5 +50,24 @@ func (h *CategoryHandler) GetAllCategories(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"data": categories,
+	})
+}
+
+func (h *CategoryHandler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	err := h.Repo.DeleteCategory(r.Context(), id)
+	if err != nil {
+		if err.Error() == "category not found" {
+			http.Error(w, "Category not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Gagal menghapus kategori", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Category deleted successfully",
 	})
 }

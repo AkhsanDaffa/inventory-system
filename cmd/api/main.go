@@ -11,6 +11,7 @@ import (
 
 	"inventory-api/internal/database"
 	"inventory-api/internal/handlers"
+	appMiddleware "inventory-api/internal/middleware"
 	"inventory-api/internal/repository"
 )
 
@@ -76,32 +77,50 @@ func main() {
 	r.Use(middleware.Recoverer)
 
 	r.Route("/products", func(r chi.Router) {
-		r.Post("/", productHandler.CreateProduct)
 		r.Get("/", productHandler.GetAllProducts)
+
+		r.Group(func(r chi.Router) {
+			r.Use(appMiddleware.AuthMiddleware)
+			r.Post("/", productHandler.CreateProduct)
+		})
 
 		r.Route("/{id}", func(r chi.Router) {
 			r.Get("/", productHandler.GetProductByID)
-			r.Put("/", productHandler.UpdateProduct)
-			r.Delete("/", productHandler.DeleteProduct)
+
+			r.Group(func(r chi.Router) {
+				r.Use(appMiddleware.AuthMiddleware)
+
+				r.Put("/", productHandler.UpdateProduct)
+				r.Delete("/", productHandler.DeleteProduct)
+			})
 		})
 	})
 
 	r.Route("/categories", func(r chi.Router) {
-		r.Post("/", categoryHandler.CreateCategory)
 		r.Get("/", categoryHandler.GetAllCategories)
+
+		r.Group(func(r chi.Router) {
+			r.Use(appMiddleware.AuthMiddleware)
+			r.Post("/", categoryHandler.CreateCategory)
+			r.Delete("/{id}", categoryHandler.DeleteCategory)
+		})
 	})
 
 	r.Route("/customers", func(r chi.Router) {
-		r.Post("/", customerHandler.CreateCustomer)
 		r.Get("/", customerHandler.GetAllCustomers)
-	})
 
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Welcome to the Inventory API"))
+		r.Group(func(r chi.Router) {
+			r.Use(appMiddleware.AuthMiddleware)
+			r.Post("/", customerHandler.CreateCustomer)
+		})
 	})
 
 	r.Post("/register", userHandler.RegisterUser)
 	r.Post("/login", userHandler.LoginUser)
+
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Welcome to the Inventory API"))
+	})
 
 	slog.Info("Starting starting...", "port", port)
 

@@ -45,3 +45,18 @@ func (r *CategoryRepository) GetAllCategories(ctx context.Context) ([]Category, 
 	}
 	return categories, nil
 }
+
+func (r *CategoryRepository) DeleteCategory(ctx context.Context, id string) error {
+	query := "DELETE FROM categories WHERE id=$1"
+
+	commandTag, err := r.DB.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed delete: %w", err)
+	}
+
+	if commandTag.RowsAffected() == 0 {
+		return fmt.Errorf("category not found")
+	}
+
+	return nil
+}
